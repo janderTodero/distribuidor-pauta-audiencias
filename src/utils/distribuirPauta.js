@@ -1,0 +1,120 @@
+export default function distribuirPauta(pauta, pessoas) {
+  if (!pauta || pauta.length === 0) {
+    alert("Importe a pauta primeiro!");
+    return [];
+  }
+  if (!pessoas || pessoas.length === 0) {
+    alert("Cadastre advogados e prepostos primeiro!");
+    return [];
+  }
+
+  const advogados = pessoas.filter((p) => p.tipo === "ADVOGADO");
+  const prepostos = pessoas.filter((p) => p.tipo === "PREPOSTO");
+
+  const contagemAdv = {};
+  const contagemPrep = {};
+  const contagemAdvDia = {};
+  const contagemPrepDia = {};
+  const horariosAdv = {};
+  const horariosPrep = {};
+
+  advogados.forEach((a) => {
+    contagemAdv[a.nome] = 0;
+    contagemAdvDia[a.nome] = {};
+    horariosAdv[a.nome] = {};
+  });
+  prepostos.forEach((p) => {
+    contagemPrep[p.nome] = 0;
+    contagemPrepDia[p.nome] = {};
+    horariosPrep[p.nome] = {};
+  });
+
+  const diaMap = [
+    "domingo",
+    "segunda",
+    "terca",
+    "quarta",
+    "quinta",
+    "sexta",
+    "sabado",
+  ];
+
+  const dentroDaFaixa = (horaAtual, faixas) => {
+    if (!faixas || faixas.length === 0) return false;
+    return faixas.some((faixa) => {
+      if (!faixa.ativo) return false;
+      const inicio =
+        parseInt(faixa.inicio.split(":")[0]) * 60 +
+        parseInt(faixa.inicio.split(":")[1]);
+      const fim =
+        parseInt(faixa.fim.split(":")[0]) * 60 +
+        parseInt(faixa.fim.split(":")[1]);
+      return horaAtual >= inicio && horaAtual <= fim;
+    });
+  };
+
+  const novaPauta = pauta.map((row) => {
+    const dt = row.datetime instanceof Date ? row.datetime : new Date(row.datetime);
+    const dia = diaMap[dt.getDay()];
+    const horaAtual = dt.getHours() * 60 + dt.getMinutes();
+
+    const escolherPessoa = (lista, contagemGeral, contagemDia, horarios) => {
+      const disponiveis = lista.filter((p) => p.disponibilidade?.[dia]?.length > 0);
+
+      let aptos = disponiveis.filter((p) => {
+        const qtdHoje = contagemDia[p.nome][dia] || 0;
+        const limitePessoa = p.limiteDiario || 3;
+        if (qtdHoje >= limitePessoa) return false;
+
+        if (!dentroDaFaixa(horaAtual, p.disponibilidade[dia])) return false;
+
+        const horariosDia = horarios[p.nome][dia] || [];
+        const conflito = horariosDia.some((h) => Math.abs(h - horaAtual) < 90);
+        if (conflito) return false;
+
+        return true;
+      });
+
+      // Filtro pelo tipo de audiência
+      const tipoAudiencia = row["AC / AIJ / ACIJ"] || row["TIPO"] || ""; // Ajuste para sua coluna
+      aptos = aptos.filter((p) => {
+        if (tipoAudiencia.toUpperCase().startsWith("A")) return p.permissoes.AIJ;
+        if (tipoAudiencia.toUpperCase().startsWith("C")) return p.permissoes.CONC;
+        return true;
+      });
+
+      if (aptos.length === 0) return null;
+
+      aptos.sort((a, b) => contagemGeral[a.nome] - contagemGeral[b.nome]);
+      const escolhido = aptos[0];
+
+      contagemGeral[escolhido.nome]++;
+      contagemDia[escolhido.nome][dia] = (contagemDia[escolhido.nome][dia] || 0) + 1;
+
+      if (!horarios[escolhido.nome][dia]) horarios[escolhido.nome][dia] = [];
+      horarios[escolhido.nome][dia].push(horaAtual);
+
+      return escolhido.nome;
+    };
+
+    // Mantém CORRESPONDENTE se já existir
+    const correspondente = row["CORRESPONDENTE"] || null;
+
+    const adv =
+      row["ADVOGADO(A)"] ||
+      escolherPessoa(advogados, contagemAdv, contagemAdvDia, horariosAdv);
+    const prep =
+      row["PREPOSTO(A)"] ||
+      escolherPessoa(prepostos, contagemPrep, contagemPrepDia, horariosPrep);
+
+    row["ADVOGADO(A)"] = adv;
+    row["PREPOSTO(A)"] = prep;
+    row["CORRESPONDENTE"] = correspondente || row["CORRESPONDENTE"];
+    row["dia"] = dia;
+    row["hora"] = dt.getHours();
+
+    return row;
+  });
+
+  return novaPauta;
+}
