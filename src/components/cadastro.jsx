@@ -5,7 +5,6 @@ export default function CadastroPessoas({ pessoas, setPessoas }) {
   const [tipo, setTipo] = useState("advogado");
   const [limite, setLimite] = useState(3);
 
-  // cada dia agora é uma lista de faixas
   const [disponibilidade, setDisponibilidade] = useState({
     segunda: [{ ativo: true, inicio: "08:00", fim: "17:00" }],
     terca: [{ ativo: true, inicio: "08:00", fim: "17:00" }],
@@ -14,7 +13,6 @@ export default function CadastroPessoas({ pessoas, setPessoas }) {
     sexta: [{ ativo: true, inicio: "08:00", fim: "17:00" }],
   });
 
-  // permissões de audiência
   const [permissoes, setPermissoes] = useState({ AIJ: true, CONC: true });
 
   const toggleDia = (dia, index) => {
@@ -56,7 +54,6 @@ export default function CadastroPessoas({ pessoas, setPessoas }) {
     ]);
     setNome("");
     setLimite(3);
-    // resetar faixas e permissões
     setDisponibilidade({
       segunda: [{ ativo: true, inicio: "08:00", fim: "17:00" }],
       terca: [{ ativo: true, inicio: "08:00", fim: "17:00" }],
@@ -67,23 +64,29 @@ export default function CadastroPessoas({ pessoas, setPessoas }) {
     setPermissoes({ AIJ: true, CONC: true });
   };
 
-  return (
-    <div className="p-6 bg-white rounded shadow w-full max-w-xl">
-      <h2 className="text-2xl font-bold mb-4">Cadastro de Pessoas</h2>
+  const removerPessoa = (index) => {
+    const novasPessoas = pessoas.filter((_, i) => i !== index);
+    setPessoas(novasPessoas);
+  };
 
-      <div className="flex flex-col gap-2 mb-4">
+  return (
+    <div className="p-8 bg-white rounded-2xl shadow-lg w-full max-w-3xl mx-auto">
+      <h2 className="text-3xl font-bold mb-6 text-gray-800">Cadastro de Pessoas</h2>
+
+      <div className="flex flex-col gap-4 mb-6">
+        {/* Formulário */}
         <input
           type="text"
           placeholder="Nome"
           value={nome}
           onChange={(e) => setNome(e.target.value)}
-          className="border px-2 py-1 rounded"
+          className="border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
         />
 
         <select
           value={tipo}
           onChange={(e) => setTipo(e.target.value)}
-          className="border px-2 py-1 rounded"
+          className="border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
         >
           <option value="advogado">Advogado</option>
           <option value="preposto">Preposto</option>
@@ -95,40 +98,44 @@ export default function CadastroPessoas({ pessoas, setPessoas }) {
           placeholder="Limite diário de audiências"
           value={limite}
           onChange={(e) => setLimite(parseInt(e.target.value))}
-          className="border px-2 py-1 rounded"
+          className="border border-gray-300 px-3 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
         />
 
         {/* Permissões */}
-        <div className="flex gap-4 my-2">
-          <label className="flex items-center gap-1">
+        <div className="flex gap-6 my-2">
+          <label className="flex items-center gap-2 text-gray-700">
             <input
               type="checkbox"
               checked={permissoes.AIJ}
               onChange={() => setPermissoes({ ...permissoes, AIJ: !permissoes.AIJ })}
+              className="w-4 h-4"
             />
             ACIJ / AIJ
           </label>
-          <label className="flex items-center gap-1">
+          <label className="flex items-center gap-2 text-gray-700">
             <input
               type="checkbox"
               checked={permissoes.CONC}
               onChange={() => setPermissoes({ ...permissoes, CONC: !permissoes.CONC })}
+              className="w-4 h-4"
             />
             CONC
           </label>
         </div>
 
-        <div className="flex flex-col gap-3">
+        {/* Disponibilidade */}
+        <div className="flex flex-col gap-6 mt-4">
           {Object.keys(disponibilidade).map((dia) => (
-            <div key={dia} className="flex flex-col gap-2">
-              <strong>{dia}</strong>
+            <div key={dia} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <strong className="block mb-2 capitalize text-gray-800">{dia}</strong>
               {disponibilidade[dia].map((faixa, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <label className="flex items-center gap-1">
+                <div key={index} className="flex items-center gap-3 mb-2">
+                  <label className="flex items-center gap-2 text-sm text-gray-600">
                     <input
                       type="checkbox"
                       checked={faixa.ativo}
                       onChange={() => toggleDia(dia, index)}
+                      className="w-4 h-4"
                     />
                     Ativo
                   </label>
@@ -137,20 +144,20 @@ export default function CadastroPessoas({ pessoas, setPessoas }) {
                     type="time"
                     value={faixa.inicio}
                     onChange={(e) => alterarHorario(dia, index, "inicio", e.target.value)}
-                    className="border px-2 py-1 rounded"
+                    className="border border-gray-300 px-2 py-1 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   />
-                  até
+                  <span className="text-gray-500">até</span>
                   <input
                     type="time"
                     value={faixa.fim}
                     onChange={(e) => alterarHorario(dia, index, "fim", e.target.value)}
-                    className="border px-2 py-1 rounded"
+                    className="border border-gray-300 px-2 py-1 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   />
 
                   {disponibilidade[dia].length > 1 && (
                     <button
                       onClick={() => removerFaixa(dia, index)}
-                      className="text-red-600 px-2 py-1 border rounded"
+                      className="text-red-500 hover:text-red-700 text-sm font-medium"
                     >
                       Remover
                     </button>
@@ -159,9 +166,9 @@ export default function CadastroPessoas({ pessoas, setPessoas }) {
               ))}
               <button
                 onClick={() => adicionarFaixa(dia)}
-                className="bg-green-600 text-white px-2 py-1 rounded hover:bg-green-700 w-max"
+                className="mt-2 text-sm bg-green-500 text-white px-3 py-1 rounded-lg hover:bg-green-600"
               >
-                Adicionar faixa
+                + Adicionar faixa
               </button>
             </div>
           ))}
@@ -169,18 +176,36 @@ export default function CadastroPessoas({ pessoas, setPessoas }) {
 
         <button
           onClick={adicionarPessoa}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 mt-4"
+          className="bg-blue-600 text-white px-5 py-2 rounded-xl hover:bg-blue-700 font-medium mt-6"
         >
-          Adicionar
+          Adicionar Pessoa
         </button>
       </div>
 
-      <h3 className="text-xl font-semibold mb-2">Lista de Pessoas</h3>
-      <ul className="list-disc pl-5">
+      {/* Lista de pessoas */}
+      <h3 className="text-2xl font-semibold mb-3 text-gray-800">Lista de Pessoas</h3>
+      <ul className="space-y-2">
         {pessoas.map((p, idx) => (
-          <li key={idx}>
-            {p.nome} ({p.tipo}) - Limite: {p.limiteDiario}/dia - Permissões:{" "}
-            {p.permissoes.AIJ ? "ACIJ / AIJ" : ""} {p.permissoes.CONC ? "CONC" : ""}
+          <li
+            key={idx}
+            className="p-3 border border-gray-200 rounded-lg bg-gray-50 text-gray-700 flex justify-between items-center"
+          >
+            <div>
+              <span className="font-medium">{p.nome}</span> ({p.tipo}) —{" "}
+              <span className="text-gray-600">
+                Limite: {p.limiteDiario}/dia
+              </span>{" "}
+              <span className="ml-2 text-gray-500 text-sm">
+                Permissões: {p.permissoes.AIJ ? "ACIJ / AIJ " : ""}
+                {p.permissoes.CONC ? "CONC" : ""}
+              </span>
+            </div>
+            <button
+              onClick={() => removerPessoa(idx)}
+              className="text-red-500 hover:text-red-700 text-sm font-medium"
+            >
+              Remover
+            </button>
           </li>
         ))}
       </ul>

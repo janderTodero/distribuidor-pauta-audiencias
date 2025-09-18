@@ -1,20 +1,32 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Tabela from "./components/tabela";
 import CadastroPessoas from "./components/cadastro";
 import distribuirPauta from "./utils/distribuirPauta";
+import ExportarExcel from "./components/exportarExcel";
 
 export default function App() {
-  const [pessoas, setPessoas] = useState([]);
-  const [pauta, setPauta] = useState([]);
+  const [pessoas, setPessoas] = useState(() => {
+    const saved = localStorage.getItem("pessoas");
+    return saved ? JSON.parse(saved) : [];
+  });
 
-  console.log("Pauta atual:", pauta);
-  console.log("Pessoas cadastradas:", pessoas);
+  const [pauta, setPauta] = useState(() => {
+    const saved = localStorage.getItem("pauta");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // salvar sempre que mudar
+  useEffect(() => {
+    localStorage.setItem("pessoas", JSON.stringify(pessoas));
+  }, [pessoas]);
+
+  useEffect(() => {
+    localStorage.setItem("pauta", JSON.stringify(pauta));
+  }, [pauta]);
 
   const handleDistribuir = () => {
-    console.log("botao clicado")
-    const novaPauta = distribuirPauta(pauta, pessoas); // chama sua função
-    console.log("Nova pauta gerada:", novaPauta, pessoas)
-    setPauta(novaPauta); // atualiza o estado -> tabela atualiza
+    const novaPauta = distribuirPauta(pauta, pessoas);
+    setPauta(novaPauta);
   };
 
   return (
@@ -29,6 +41,7 @@ export default function App() {
       </button>
 
       <Tabela pauta={pauta} setPauta={setPauta} pessoas={pessoas} />
+      <ExportarExcel data={pauta} fileName="audiencias.xlsx" />
     </div>
   );
 }

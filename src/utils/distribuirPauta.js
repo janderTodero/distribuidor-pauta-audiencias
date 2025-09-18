@@ -53,6 +53,19 @@ export default function distribuirPauta(pauta, pessoas) {
     });
   };
 
+  // Função para registrar contagem de quem já está fixo na linha
+  const contabilizarExistente = (nome, contagemGeral, contagemDia, horarios, dia, horaAtual) => {
+    if (!nome) return;
+
+    if (!contagemDia[nome]) contagemDia[nome] = {};
+    if (!horarios[nome]) horarios[nome] = {};
+    if (!horarios[nome][dia]) horarios[nome][dia] = [];
+
+    contagemGeral[nome] = (contagemGeral[nome] || 0) + 1;
+    contagemDia[nome][dia] = (contagemDia[nome][dia] || 0) + 1;
+    horarios[nome][dia].push(horaAtual);
+  };
+
   const novaPauta = pauta.map((row) => {
     const dt = row.datetime instanceof Date ? row.datetime : new Date(row.datetime);
     const dia = diaMap[dt.getDay()];
@@ -76,7 +89,7 @@ export default function distribuirPauta(pauta, pessoas) {
       });
 
       // Filtro pelo tipo de audiência
-      const tipoAudiencia = row["AC / AIJ / ACIJ"] || row["TIPO"] || ""; // Ajuste para sua coluna
+      const tipoAudiencia = row["AC / AIJ / ACIJ"] || row["TIPO"] || "";
       aptos = aptos.filter((p) => {
         if (tipoAudiencia.toUpperCase().startsWith("A")) return p.permissoes.AIJ;
         if (tipoAudiencia.toUpperCase().startsWith("C")) return p.permissoes.CONC;
@@ -100,12 +113,20 @@ export default function distribuirPauta(pauta, pessoas) {
     // Mantém CORRESPONDENTE se já existir
     const correspondente = row["CORRESPONDENTE"] || null;
 
-    const adv =
-      row["ADVOGADO(A)"] ||
-      escolherPessoa(advogados, contagemAdv, contagemAdvDia, horariosAdv);
-    const prep =
-      row["PREPOSTO(A)"] ||
-      escolherPessoa(prepostos, contagemPrep, contagemPrepDia, horariosPrep);
+    const advExistente = row["ADVOGADO(A)"] && row["ADVOGADO(A)"].trim() !== "";
+    const prepExistente = row["PREPOSTO(A)"] && row["PREPOSTO(A)"].trim() !== "";
+
+    const adv = advExistente
+      ? row["ADVOGADO(A)"]
+      : escolherPessoa(advogados, contagemAdv, contagemAdvDia, horariosAdv);
+
+    const prep = prepExistente
+      ? row["PREPOSTO(A)"]
+      : escolherPessoa(prepostos, contagemPrep, contagemPrepDia, horariosPrep);
+
+    // Se já tinha nome fixo, contabiliza para não bagunçar distribuição
+    if (advExistente) contabilizarExistente(adv, contagemAdv, contagemAdvDia, horariosAdv, dia, horaAtual);
+    if (prepExistente) contabilizarExistente(prep, contagemPrep, contagemPrepDia, horariosPrep, dia, horaAtual);
 
     row["ADVOGADO(A)"] = adv;
     row["PREPOSTO(A)"] = prep;
