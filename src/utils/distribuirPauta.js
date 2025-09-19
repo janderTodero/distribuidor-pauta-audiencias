@@ -54,7 +54,14 @@ export default function distribuirPauta(pauta, pessoas) {
   };
 
   // Função para registrar contagem de quem já está fixo na linha
-  const contabilizarExistente = (nome, contagemGeral, contagemDia, horarios, dia, horaAtual) => {
+  const contabilizarExistente = (
+    nome,
+    contagemGeral,
+    contagemDia,
+    horarios,
+    dia,
+    horaAtual
+  ) => {
     if (!nome) return;
 
     if (!contagemDia[nome]) contagemDia[nome] = {};
@@ -66,67 +73,118 @@ export default function distribuirPauta(pauta, pessoas) {
     horarios[nome][dia].push(horaAtual);
   };
 
+  const escolherPessoa = (
+    lista,
+    contagemGeral,
+    contagemDia,
+    horarios,
+    dia,
+    horaAtual,
+    tipoAudiencia
+  ) => {
+    const disponiveis = lista.filter((p) => p.disponibilidade?.[dia]?.length > 0);
+
+    let aptos = disponiveis.filter((p) => {
+      const qtdHoje = contagemDia[p.nome][dia] || 0;
+      const limitePessoa = p.limiteDiario || 3;
+      if (qtdHoje >= limitePessoa) return false;
+
+      if (!dentroDaFaixa(horaAtual, p.disponibilidade[dia])) return false;
+
+      const horariosDia = horarios[p.nome][dia] || [];
+      const conflito = horariosDia.some((h) => Math.abs(h - horaAtual) < 90);
+      if (conflito) return false;
+
+      return true;
+    });
+
+    // 🔥 Permissões agora são por dia da semana
+    aptos = aptos.filter((p) => {
+  const permissoesDia = p.permissoes?.[dia] ?? { AIJ: false, CONC: false };
+  if (tipoAudiencia.toUpperCase().startsWith("A")) return !!permissoesDia.AIJ;
+  if (tipoAudiencia.toUpperCase().startsWith("C")) return !!permissoesDia.CONC;
+  return true;
+});
+
+    if (aptos.length === 0) return null;
+
+    aptos.sort((a, b) => contagemGeral[a.nome] - contagemGeral[b.nome]);
+    const escolhido = aptos[0];
+
+    contagemGeral[escolhido.nome]++;
+    contagemDia[escolhido.nome][dia] =
+      (contagemDia[escolhido.nome][dia] || 0) + 1;
+
+    if (!horarios[escolhido.nome][dia]) horarios[escolhido.nome][dia] = [];
+    horarios[escolhido.nome][dia].push(horaAtual);
+
+    return escolhido.nome;
+  };
+
   const novaPauta = pauta.map((row) => {
-    const dt = row.datetime instanceof Date ? row.datetime : new Date(row.datetime);
+    const dt =
+      row.datetime instanceof Date ? row.datetime : new Date(row.datetime);
     const dia = diaMap[dt.getDay()];
     const horaAtual = dt.getHours() * 60 + dt.getMinutes();
-
-    const escolherPessoa = (lista, contagemGeral, contagemDia, horarios) => {
-      const disponiveis = lista.filter((p) => p.disponibilidade?.[dia]?.length > 0);
-
-      let aptos = disponiveis.filter((p) => {
-        const qtdHoje = contagemDia[p.nome][dia] || 0;
-        const limitePessoa = p.limiteDiario || 3;
-        if (qtdHoje >= limitePessoa) return false;
-
-        if (!dentroDaFaixa(horaAtual, p.disponibilidade[dia])) return false;
-
-        const horariosDia = horarios[p.nome][dia] || [];
-        const conflito = horariosDia.some((h) => Math.abs(h - horaAtual) < 90);
-        if (conflito) return false;
-
-        return true;
-      });
-
-      // Filtro pelo tipo de audiência
-      const tipoAudiencia = row["AC / AIJ / ACIJ"] || row["TIPO"] || "";
-      aptos = aptos.filter((p) => {
-        if (tipoAudiencia.toUpperCase().startsWith("A")) return p.permissoes.AIJ;
-        if (tipoAudiencia.toUpperCase().startsWith("C")) return p.permissoes.CONC;
-        return true;
-      });
-
-      if (aptos.length === 0) return null;
-
-      aptos.sort((a, b) => contagemGeral[a.nome] - contagemGeral[b.nome]);
-      const escolhido = aptos[0];
-
-      contagemGeral[escolhido.nome]++;
-      contagemDia[escolhido.nome][dia] = (contagemDia[escolhido.nome][dia] || 0) + 1;
-
-      if (!horarios[escolhido.nome][dia]) horarios[escolhido.nome][dia] = [];
-      horarios[escolhido.nome][dia].push(horaAtual);
-
-      return escolhido.nome;
-    };
+    const tipoAudiencia = row["AC / AIJ / ACIJ"] || row["TIPO"] || "";
 
     // Mantém CORRESPONDENTE se já existir
     const correspondente = row["CORRESPONDENTE"] || null;
 
-    const advExistente = row["ADVOGADO(A)"] && row["ADVOGADO(A)"].trim() !== "";
-    const prepExistente = row["PREPOSTO(A)"] && row["PREPOSTO(A)"].trim() !== "";
+    const advExistente =
+      row["ADVOGADO(A)"] && row["ADVOGADO(A)"].trim() !== "";
+    const prepExistente =
+      row["PREPOSTO(A)"] && row["PREPOSTO(A)"].trim() !== "";
 
-    const adv = advExistente
+    let adv = advExistente
       ? row["ADVOGADO(A)"]
-      : escolherPessoa(advogados, contagemAdv, contagemAdvDia, horariosAdv);
+      : escolherPessoa(
+          advogados,
+          contagemAdv,
+          contagemAdvDia,
+          horariosAdv,
+          dia,
+          horaAtual,
+          tipoAudiencia
+        );
 
-    const prep = prepExistente
+    let prep = prepExistente
       ? row["PREPOSTO(A)"]
-      : escolherPessoa(prepostos, contagemPrep, contagemPrepDia, horariosPrep);
+      : escolherPessoa(
+          prepostos,
+          contagemPrep,
+          contagemPrepDia,
+          horariosPrep,
+          dia,
+          horaAtual,
+          tipoAudiencia
+        );
 
-    // Se já tinha nome fixo, contabiliza para não bagunçar distribuição
-    if (advExistente) contabilizarExistente(adv, contagemAdv, contagemAdvDia, horariosAdv, dia, horaAtual);
-    if (prepExistente) contabilizarExistente(prep, contagemPrep, contagemPrepDia, horariosPrep, dia, horaAtual);
+    // 🚨 Só atribui se tiver par completo
+    if ((!advExistente && !prepExistente) && (!adv || !prep)) {
+      adv = null;
+      prep = null;
+    }
+
+    // Se já tinha nome fixo, contabiliza
+    if (advExistente)
+      contabilizarExistente(
+        adv,
+        contagemAdv,
+        contagemAdvDia,
+        horariosAdv,
+        dia,
+        horaAtual
+      );
+    if (prepExistente)
+      contabilizarExistente(
+        prep,
+        contagemPrep,
+        contagemPrepDia,
+        horariosPrep,
+        dia,
+        horaAtual
+      );
 
     row["ADVOGADO(A)"] = adv;
     row["PREPOSTO(A)"] = prep;
