@@ -18,15 +18,21 @@ export default function distribuirPauta(pauta, pessoas) {
   const horariosAdv = {};
   const horariosPrep = {};
 
+  // 🔥 Novos contadores semanais
+  const contagemSemanalAdv = {};
+  const contagemSemanalPrep = {};
+
   advogados.forEach((a) => {
     contagemAdv[a.nome] = 0;
     contagemAdvDia[a.nome] = {};
     horariosAdv[a.nome] = {};
+    contagemSemanalAdv[a.nome] = 0;
   });
   prepostos.forEach((p) => {
     contagemPrep[p.nome] = 0;
     contagemPrepDia[p.nome] = {};
     horariosPrep[p.nome] = {};
+    contagemSemanalPrep[p.nome] = 0;
   });
 
   const diaMap = [
@@ -53,14 +59,14 @@ export default function distribuirPauta(pauta, pessoas) {
     });
   };
 
-  // Função para registrar contagem de quem já está fixo na linha
   const contabilizarExistente = (
     nome,
     contagemGeral,
     contagemDia,
     horarios,
     dia,
-    horaAtual
+    horaAtual,
+    contagemSemanal
   ) => {
     if (!nome) return;
 
@@ -70,6 +76,8 @@ export default function distribuirPauta(pauta, pessoas) {
 
     contagemGeral[nome] = (contagemGeral[nome] || 0) + 1;
     contagemDia[nome][dia] = (contagemDia[nome][dia] || 0) + 1;
+    contagemSemanal[nome] = (contagemSemanal[nome] || 0) + 1;
+
     horarios[nome][dia].push(horaAtual);
   };
 
@@ -80,7 +88,8 @@ export default function distribuirPauta(pauta, pessoas) {
     horarios,
     dia,
     horaAtual,
-    tipoAudiencia
+    tipoAudiencia,
+    contagemSemanal
   ) => {
     const disponiveis = lista.filter((p) => p.disponibilidade?.[dia]?.length > 0);
 
@@ -98,22 +107,28 @@ export default function distribuirPauta(pauta, pessoas) {
       return true;
     });
 
-    // 🔥 Permissões agora são por dia da semana
     aptos = aptos.filter((p) => {
-  const permissoesDia = p.permissoes?.[dia] ?? { AIJ: false, CONC: false };
-  if (tipoAudiencia.toUpperCase().startsWith("A")) return !!permissoesDia.AIJ;
-  if (tipoAudiencia.toUpperCase().startsWith("C")) return !!permissoesDia.CONC;
-  return true;
-});
+      const permissoesDia = p.permissoes?.[dia] ?? { AIJ: false, CONC: false };
+      if (tipoAudiencia.toUpperCase().startsWith("A")) return !!permissoesDia.AIJ;
+      if (tipoAudiencia.toUpperCase().startsWith("C")) return !!permissoesDia.CONC;
+      return true;
+    });
 
     if (aptos.length === 0) return null;
 
-    aptos.sort((a, b) => contagemGeral[a.nome] - contagemGeral[b.nome]);
+    // 🔥 Agora ordena primeiro pela carga semanal, depois geral
+    aptos.sort((a, b) => {
+      const diffSemanal = contagemSemanal[a.nome] - contagemSemanal[b.nome];
+      if (diffSemanal !== 0) return diffSemanal;
+      return contagemGeral[a.nome] - contagemGeral[b.nome];
+    });
+
     const escolhido = aptos[0];
 
     contagemGeral[escolhido.nome]++;
     contagemDia[escolhido.nome][dia] =
       (contagemDia[escolhido.nome][dia] || 0) + 1;
+    contagemSemanal[escolhido.nome]++;
 
     if (!horarios[escolhido.nome][dia]) horarios[escolhido.nome][dia] = [];
     horarios[escolhido.nome][dia].push(horaAtual);
@@ -128,7 +143,6 @@ export default function distribuirPauta(pauta, pessoas) {
     const horaAtual = dt.getHours() * 60 + dt.getMinutes();
     const tipoAudiencia = row["AC / AIJ / ACIJ"] || row["TIPO"] || "";
 
-    // Mantém CORRESPONDENTE se já existir
     const correspondente = row["CORRESPONDENTE"] || null;
 
     const advExistente =
@@ -145,7 +159,8 @@ export default function distribuirPauta(pauta, pessoas) {
           horariosAdv,
           dia,
           horaAtual,
-          tipoAudiencia
+          tipoAudiencia,
+          contagemSemanalAdv
         );
 
     let prep = prepExistente
@@ -157,16 +172,15 @@ export default function distribuirPauta(pauta, pessoas) {
           horariosPrep,
           dia,
           horaAtual,
-          tipoAudiencia
+          tipoAudiencia,
+          contagemSemanalPrep
         );
 
-    // 🚨 Só atribui se tiver par completo
     if ((!advExistente && !prepExistente) && (!adv || !prep)) {
       adv = null;
       prep = null;
     }
 
-    // Se já tinha nome fixo, contabiliza
     if (advExistente)
       contabilizarExistente(
         adv,
@@ -174,7 +188,8 @@ export default function distribuirPauta(pauta, pessoas) {
         contagemAdvDia,
         horariosAdv,
         dia,
-        horaAtual
+        horaAtual,
+        contagemSemanalAdv
       );
     if (prepExistente)
       contabilizarExistente(
@@ -183,7 +198,8 @@ export default function distribuirPauta(pauta, pessoas) {
         contagemPrepDia,
         horariosPrep,
         dia,
-        horaAtual
+        horaAtual,
+        contagemSemanalPrep
       );
 
     row["ADVOGADO(A)"] = adv;
