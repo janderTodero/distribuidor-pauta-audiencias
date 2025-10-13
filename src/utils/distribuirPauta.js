@@ -17,8 +17,6 @@ export default function distribuirPauta(pauta, pessoas) {
   const contagemPrepDia = {};
   const horariosAdv = {};
   const horariosPrep = {};
-
-  // 🔥 Novos contadores semanais
   const contagemSemanalAdv = {};
   const contagemSemanalPrep = {};
 
@@ -57,6 +55,28 @@ export default function distribuirPauta(pauta, pessoas) {
         parseInt(faixa.fim.split(":")[1]);
       return horaAtual >= inicio && horaAtual <= fim;
     });
+  };
+
+  // 🔹 Função auxiliar para calcular total de minutos disponíveis na semana
+  const calcularDisponibilidadeTotal = (pessoa) => {
+    if (!pessoa.disponibilidade) return 0;
+    return Object.values(pessoa.disponibilidade).reduce((acc, faixas) => {
+      if (!Array.isArray(faixas)) return acc;
+      return (
+        acc +
+        faixas
+          .filter((f) => f.ativo)
+          .reduce((soma, f) => {
+            const inicio =
+              parseInt(f.inicio.split(":")[0]) * 60 +
+              parseInt(f.inicio.split(":")[1]);
+            const fim =
+              parseInt(f.fim.split(":")[0]) * 60 +
+              parseInt(f.fim.split(":")[1]);
+            return soma + (fim - inicio);
+          }, 0)
+      );
+    }, 0);
   };
 
   const contabilizarExistente = (
@@ -116,11 +136,24 @@ export default function distribuirPauta(pauta, pessoas) {
 
     if (aptos.length === 0) return null;
 
-    // 🔥 Agora ordena primeiro pela carga semanal, depois geral
+    // 🔥 Novo balanceamento proporcional à disponibilidade
     aptos.sort((a, b) => {
-      const diffSemanal = contagemSemanal[a.nome] - contagemSemanal[b.nome];
-      if (diffSemanal !== 0) return diffSemanal;
-      return contagemGeral[a.nome] - contagemGeral[b.nome];
+      const dispA = calcularDisponibilidadeTotal(a) || 1;
+      const dispB = calcularDisponibilidadeTotal(b) || 1;
+
+      // peso combinado: semanal (2x), diário (1x), total (0.5x)
+      const scoreA =
+        (contagemSemanal[a.nome] / dispA) * 2 +
+        (contagemDia[a.nome][dia] || 0) * 1 +
+        contagemGeral[a.nome] * 0.5;
+
+      const scoreB =
+        (contagemSemanal[b.nome] / dispB) * 2 +
+        (contagemDia[b.nome][dia] || 0) * 1 +
+        contagemGeral[b.nome] * 0.5;
+
+      if (scoreA === scoreB) return Math.random() - 0.5; // desempate aleatório leve
+      return scoreA - scoreB;
     });
 
     const escolhido = aptos[0];
@@ -210,6 +243,10 @@ export default function distribuirPauta(pauta, pessoas) {
 
     return row;
   });
+
+  // 🧾 (opcional) visualizar distribuição
+  console.log("Distribuição semanal - Advogados:", contagemSemanalAdv);
+  console.log("Distribuição semanal - Prepostos:", contagemSemanalPrep);
 
   return novaPauta;
 }
