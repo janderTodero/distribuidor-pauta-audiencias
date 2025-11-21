@@ -188,7 +188,7 @@ export default function distribuirPauta(pauta, pessoas) {
 
     let aptos = disponiveis.filter((p) => {
       const qtdHoje = contagemDia[p.nome]?.[dia] || 0;
-      const limitePessoa = p.limiteDiario || 3;
+      const limitePessoa = p.limiteDiario || 1;
       if (qtdHoje >= limitePessoa) return false;
 
       if (!dentroDaFaixa(horaAtual, p.disponibilidade[dia])) return false;
