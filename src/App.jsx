@@ -30,12 +30,12 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-6 flex flex-col items-center gap-6">
+    <div className="min-h-screen bg-slate-900 p-6 flex flex-col items-center gap-6 text-gray-100">
       <CadastroPessoas pessoas={pessoas} setPessoas={setPessoas} />
 
       <button
         onClick={handleDistribuir}
-        className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700"
+        className="bg-green-600 text-white px-6 py-3 rounded-xl hover:bg-green-500 font-semibold shadow-lg transition-all transform hover:scale-105"
       >
         Distribuir Pauta Automaticamente
       </button>

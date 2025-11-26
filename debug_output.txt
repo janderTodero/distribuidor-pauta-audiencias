@@ -1,0 +1,28 @@
+﻿Running distribution...
+
+========== RELAT├ôRIO DE DISTRIBUI├ç├âO ==========
+
+­ƒôï ADVOGADOS:
+
+­ƒæñ Adv A:
+   Total: 5 audi├¬ncias
+   AIJ: 5 | CONC: 0 | Outros: 0
+   Disponibilidade: 1 dias, 10h
+   Por dia: { segunda: 5 }
+
+­ƒæñ Adv B:
+   Total: 6 audi├¬ncias
+   AIJ: 3 | CONC: 3 | Outros: 0
+   Disponibilidade: 1 dias, 10h
+   Por dia: { segunda: 6 }
+
+
+­ƒôï PREPOSTOS:
+
+­ƒæñ Prep 1:
+   Total: 11 audi├¬ncias
+   AIJ: 8 | CONC: 3 | Outros: 0
+   Disponibilidade: 1 dias, 10h
+   Por dia: { segunda: 11 }
+Assigned Lawyer: Adv B
+SUCCESS: Adv B prioritized (Fewer AIJs).

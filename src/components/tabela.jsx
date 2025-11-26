@@ -138,12 +138,12 @@ export default function Tabela({ pauta, setPauta }) {
   }, []);
 
   return (
-    <div className="bg-white shadow-lg rounded-2xl w-full max-w-6xl p-6">
-      <h1 className="text-3xl font-bold mb-6 text-blue-700 text-center">
+    <div className="bg-slate-800 shadow-xl rounded-2xl w-full max-w-[1600px] p-6 border border-slate-700">
+      <h1 className="text-3xl font-bold mb-6 text-blue-400 text-center">
         Distribuição de Audiências
       </h1>
 
-      <div className="flex justify-center mb-4 gap-4">
+      <div className="flex justify-center mb-4 gap-4 text-gray-200">
         <label className="flex flex-col items-center">
           Última linha a considerar:
           <input
@@ -151,13 +151,13 @@ export default function Tabela({ pauta, setPauta }) {
             value={maxRows}
             onChange={(e) => setMaxRows(e.target.value)}
             placeholder="Ex: 82"
-            className="border rounded px-2 py-1 w-24 mt-1 text-center"
+            className="bg-slate-900 border border-slate-600 rounded px-3 py-1 w-24 mt-1 text-center text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
           />
         </label>
       </div>
 
       <div className="flex justify-center mb-6">
-        <label className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow cursor-pointer hover:bg-blue-700 transition">
+        <label className="bg-blue-600 text-white px-6 py-2 rounded-xl shadow-lg cursor-pointer hover:bg-blue-500 transition font-medium">
           Importar Excel
           <input
             type="file"
@@ -168,19 +168,19 @@ export default function Tabela({ pauta, setPauta }) {
         </label>
       </div>
 
-      <div ref={topScrollRef} className="overflow-x-auto w-full mb-2 h-4 bg-gray-200">
+      <div ref={topScrollRef} className="overflow-x-auto w-full mb-2 h-4 bg-slate-700 rounded">
         <div style={{ width: table.getTotalSize(), height: 1 }} />
       </div>
 
-      <div ref={tableWrapperRef} className="overflow-x-auto w-full">
-        <table className="min-w-max border border-gray-300 text-xs">
+      <div ref={tableWrapperRef} className="overflow-x-auto w-full rounded-lg border border-slate-600">
+        <table className="min-w-max text-xs text-gray-300">
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
-                    className="border px-2 py-1 bg-gray-100 font-medium text-gray-700 text-center whitespace-nowrap relative"
+                    className="border-b border-r border-slate-600 px-3 py-2 bg-slate-700 font-semibold text-gray-100 text-center whitespace-nowrap relative"
                     style={{ width: header.getSize() }}
                   >
                     {flexRender(header.column.columnDef.header, header.getContext())}
@@ -189,7 +189,7 @@ export default function Tabela({ pauta, setPauta }) {
                         {...{
                           onMouseDown: header.getResizeHandler(),
                           onTouchStart: header.getResizeHandler(),
-                          className: "absolute right-0 top-0 h-full w-2 cursor-col-resize bg-gray-300",
+                          className: "absolute right-0 top-0 h-full w-1 cursor-col-resize bg-slate-500 hover:bg-blue-400",
                         }}
                       />
                     )}
@@ -200,11 +200,11 @@ export default function Tabela({ pauta, setPauta }) {
           </thead>
           <tbody>
             {table.getRowModel().rows.map((row) => (
-              <tr key={row.original._rowIndex} className="hover:bg-gray-50">
+              <tr key={row.original._rowIndex} className="hover:bg-slate-700 transition-colors even:bg-slate-800/50">
                 {row.getVisibleCells().map((cell) => (
                   <td
                     key={row.original._rowIndex + "_" + cell.column.id}
-                    className="border px-2 py-1 text-gray-800 text-center whitespace-nowrap overflow-hidden text-ellipsis"
+                    className="border-b border-r border-slate-600 px-2 py-1 text-center whitespace-nowrap overflow-hidden text-ellipsis"
                   >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>

@@ -8,10 +8,10 @@ export default function ExportarExcel({ data, fileName = "tabela.xlsx" }) {
     }
 
     // gera um novo array apenas com as colunas desejadas
-   const exportData = data.map((row) => ({
-  "ADVOGADO(A)": row["ADVOGADO(A)"] || "",
-  "PREPOSTO(A)": row["PREPOSTO(A)"] || "",
-}));
+    const exportData = data.map((row) => ({
+      "ADVOGADO(A)": row["ADVOGADO(A)"] || "",
+      "PREPOSTO(A)": row["PREPOSTO(A)"] || "",
+    }));
 
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
@@ -23,7 +23,7 @@ export default function ExportarExcel({ data, fileName = "tabela.xlsx" }) {
   return (
     <button
       onClick={handleExport}
-      className="bg-green-600 text-white px-4 py-2 rounded-lg shadow hover:bg-green-700 transition"
+      className="bg-green-600 text-white px-6 py-3 rounded-xl shadow-lg hover:bg-green-500 transition-all font-semibold active:scale-95"
     >
       Exportar Excel
     </button>

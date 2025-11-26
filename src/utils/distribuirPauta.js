@@ -105,13 +105,13 @@ export default function distribuirPauta(pauta, pessoas) {
 
   const getTiposPermitidos = (pessoa) => {
     if (!pessoa.permissoes) return ["AIJ", "CONC", "OUTROS"];
-    
+
     const tipos = new Set();
     Object.values(pessoa.permissoes).forEach((perm) => {
       if (perm?.AIJ) tipos.add("AIJ");
       if (perm?.CONC) tipos.add("CONC");
     });
-    
+
     if (tipos.size === 0) return ["AIJ", "CONC", "OUTROS"];
     return Array.from(tipos);
   };
@@ -120,16 +120,31 @@ export default function distribuirPauta(pauta, pessoas) {
     const diasDisponiveis = calcularDiasDisponiveis(pessoa);
     const minutosDisponiveis = calcularDisponibilidadeTotal(pessoa);
     const tiposPermitidos = getTiposPermitidos(pessoa);
-    
+
     let escassez = diasDisponiveis * minutosDisponiveis * tiposPermitidos.length;
-    
+
     if (tiposPermitidos.length === 1) escassez = escassez * 0.3;
     if (diasDisponiveis === 1) escassez = escassez * 0.2;
-    
+
     return escassez || 1;
   };
 
-  // 🔧 CORRIGIDO: Adiciona verificações de segurança
+  const calcularPontuacaoGap = (pessoa, dia, horaAtual, horarios) => {
+    const horariosDia = horarios[pessoa.nome]?.[dia] || [];
+    if (horariosDia.length === 0) return 0;
+
+    const diffs = horariosDia.map(h => Math.abs(h - horaAtual));
+    const minDiff = Math.min(...diffs);
+
+    if (minDiff < 60) return 1000;
+
+    if (minDiff <= 180) {
+      return -50 + (minDiff / 10);
+    }
+
+    return minDiff / 60;
+  };
+
   const contabilizarExistente = (
     nome,
     contagemGeral,
@@ -143,7 +158,6 @@ export default function distribuirPauta(pauta, pessoas) {
   ) => {
     if (!nome) return;
 
-    // 🔧 Inicializa estruturas se a pessoa não estiver cadastrada
     if (contagemGeral[nome] === undefined) contagemGeral[nome] = 0;
     if (!contagemDia[nome]) contagemDia[nome] = {};
     if (!horarios[nome]) horarios[nome] = {};
@@ -155,11 +169,12 @@ export default function distribuirPauta(pauta, pessoas) {
     contagemDia[nome][dia] = (contagemDia[nome][dia] || 0) + 1;
     contagemSemanal[nome]++;
 
-    const tipoNorm = tipoAudiencia?.toUpperCase().startsWith("A")
+    const tipoStr = tipoAudiencia?.toUpperCase() || "";
+    const tipoNorm = tipoStr.startsWith("A")
       ? "AIJ"
-      : tipoAudiencia?.toUpperCase().startsWith("C")
-      ? "CONC"
-      : "OUTROS";
+      : tipoStr.startsWith("C")
+        ? "CONC"
+        : "OUTROS";
 
     contagemPorTipo[nome][tipoNorm]++;
     horarios[nome][dia].push(horaAtual);
@@ -180,96 +195,163 @@ export default function distribuirPauta(pauta, pessoas) {
       (p) => p.disponibilidade?.[dia]?.length > 0
     );
 
-    const tipoNormalizado = tipoAudiencia?.toUpperCase().startsWith("A")
+    const tipoStr = tipoAudiencia?.toUpperCase() || "";
+    const tipoNormalizado = tipoStr.startsWith("A")
       ? "AIJ"
-      : tipoAudiencia?.toUpperCase().startsWith("C")
-      ? "CONC"
-      : "OUTROS";
+      : tipoStr.startsWith("C")
+        ? "CONC"
+        : "OUTROS";
 
     let aptos = disponiveis.filter((p) => {
       const qtdHoje = contagemDia[p.nome]?.[dia] || 0;
       const limitePessoa = p.limiteDiario || 1;
-      if (qtdHoje >= limitePessoa) return false;
+      if (qtdHoje >= limitePessoa) {
+        return false;
+      }
 
-      if (!dentroDaFaixa(horaAtual, p.disponibilidade[dia])) return false;
+      if (!dentroDaFaixa(horaAtual, p.disponibilidade[dia])) {
+        return false;
+      }
 
       const horariosDia = horarios[p.nome]?.[dia] || [];
       const conflito = horariosDia.some((h) => Math.abs(h - horaAtual) < 60);
-      if (conflito) return false;
+      if (conflito) {
+        return false;
+      }
 
       const permissoesDia = p.permissoes?.[dia] ?? { AIJ: true, CONC: true };
-      if (tipoNormalizado === "AIJ" && !permissoesDia.AIJ) return false;
-      if (tipoNormalizado === "CONC" && !permissoesDia.CONC) return false;
+      if (tipoNormalizado === "AIJ" && !permissoesDia.AIJ) {
+        return false;
+      }
+      if (tipoNormalizado === "CONC" && !permissoesDia.CONC) {
+        return false;
+      }
 
       return true;
     });
 
     if (aptos.length === 0) return null;
 
-    aptos.sort((a, b) => {
+    const candidatosEscassos = aptos.filter(p => calcularDiasDisponiveis(p) <= 1);
+
+    // 2. Identificar especialistas em AIJ (só fazem AIJ) para audiências de AIJ
+    const especialistasAIJ = aptos.filter(p => {
+      if (tipoNormalizado !== "AIJ") return false;
+      const tipos = getTiposPermitidos(p);
+      return tipos.includes("AIJ") && !tipos.includes("CONC");
+    });
+
+    // Lógica de Prioridade
+    let poolFinal = aptos;
+
+    if (candidatosEscassos.length > 0) {
+      // Se tem gente que só pode hoje, ELES SÃO A PRIORIDADE MÁXIMA
+      poolFinal = candidatosEscassos;
+    } else if (especialistasAIJ.length > 0) {
+      // Se é AIJ e tem gente que SÓ faz AIJ, prioriza eles
+      poolFinal = especialistasAIJ;
+    }
+
+    // Ordenação (Score)
+    poolFinal.sort((a, b) => {
+      // 1. Fator de Escassez (CRÍTICO)
+      // Só prioriza escassez se for um caso CRÍTICO (ex: score < 1500, equivalente a poucos dias/horas)
       const escassezA = calcularEscassez(a);
       const escassezB = calcularEscassez(b);
 
+      const isCriticalA = escassezA < 1500;
+      const isCriticalB = escassezB < 1500;
+
+      // Se um é crítico e o outro não, o crítico ganha prioridade absoluta
+      if (isCriticalA && !isCriticalB) return -1;
+      if (!isCriticalA && isCriticalB) return 1;
+
+      // Se ambos são críticos OU ambos são tranquilos, decide pelo balanceamento de carga
+
+      // 2. Fatores de Balanceamento
       const dispA = calcularDisponibilidadeTotal(a);
       const dispB = calcularDisponibilidadeTotal(b);
 
-      const prioridadeEscassezA = escassezA * 5;
-      const prioridadeEscassezB = escassezB * 5;
+      // Normaliza a contagem semanal pela disponibilidade (quem tem mais horas deve pegar mais)
+      // Adiciona 1 para evitar divisão por zero
+      const taxaSemanalA = (contagemSemanal[a.nome] || 0) / (dispA / 60 || 1);
+      const taxaSemanalB = (contagemSemanal[b.nome] || 0) / (dispB / 60 || 1);
 
-      const taxaSemanalA = (contagemSemanal[a.nome] || 0) / (dispA / 60);
-      const taxaSemanalB = (contagemSemanal[b.nome] || 0) / (dispB / 60);
+      // Diferença de taxa é o fator principal para balanceamento
+      // Se A tem taxa menor que B, A deve vir primeiro (resultado negativo)
+      const diffTaxa = taxaSemanalA - taxaSemanalB;
 
-      const qtdHojeA = contagemDia[a.nome]?.[dia] || 0;
-      const qtdHojeB = contagemDia[b.nome]?.[dia] || 0;
-
-      const porTipoA = contagemPorTipo[a.nome] || { AIJ: 0, CONC: 0, OUTROS: 0 };
-      const porTipoB = contagemPorTipo[b.nome] || { AIJ: 0, CONC: 0, OUTROS: 0 };
-
-      const desequilibrioTipoA = Math.abs(porTipoA.AIJ - porTipoA.CONC);
-      const desequilibrioTipoB = Math.abs(porTipoB.AIJ - porTipoB.CONC);
-
-      const scoreA =
-        prioridadeEscassezA +
-        taxaSemanalA * 2 +
-        qtdHojeA * 1.5 +
-        ((contagemGeral[a.nome] || 0) / dispA) * 0.5 +
-        desequilibrioTipoA * 0.3;
-
-      const scoreB =
-        prioridadeEscassezB +
-        taxaSemanalB * 2 +
-        qtdHojeB * 1.5 +
-        ((contagemGeral[b.nome] || 0) / dispB) * 0.5 +
-        desequilibrioTipoB * 0.3;
-
-      if (Math.abs(scoreA - scoreB) < 0.1) {
-        return porTipoA[tipoNormalizado] - porTipoB[tipoNormalizado];
+      // FIX: Relaxed threshold from 0.0001 to 0.1 to allow Type Balancing to kick in
+      if (Math.abs(diffTaxa) > 0.1) {
+        return diffTaxa; // Prioriza quem está mais "atrasado" na proporção
       }
 
-      return scoreA - scoreB;
+      // 3. Balanceamento por TIPO (Novo)
+      // Se a carga total está parecida, tenta equilibrar AIJ vs CONC
+      const tipoAtual = tipoNormalizado; // AIJ ou CONC
+      if (tipoAtual === "AIJ" || tipoAtual === "CONC") {
+        const qtdA = contagemPorTipo[a.nome]?.[tipoAtual] || 0;
+        const qtdB = contagemPorTipo[b.nome]?.[tipoAtual] || 0;
+        if (qtdA !== qtdB) {
+          return qtdA - qtdB; // Prioriza quem tem MENOS desse tipo específico
+        }
+      }
+
+      // 4. Critérios de Desempate (Gap)
+      const gapScoreA = calcularPontuacaoGap(a, dia, horaAtual, horarios);
+      const gapScoreB = calcularPontuacaoGap(b, dia, horaAtual, horarios);
+
+      // Preferência por quem tem gap melhor (evita buracos na agenda)
+      // Quanto menor o gapScore, melhor (mais próximo de um gap ideal ou longe de conflito)
+      return gapScoreA - gapScoreB;
     });
 
-    const escolhido = aptos[0];
-
-    contagemGeral[escolhido.nome] = (contagemGeral[escolhido.nome] || 0) + 1;
-    contagemDia[escolhido.nome][dia] =
-      (contagemDia[escolhido.nome]?.[dia] || 0) + 1;
-    contagemSemanal[escolhido.nome] = (contagemSemanal[escolhido.nome] || 0) + 1;
-    
-    if (!contagemPorTipo[escolhido.nome]) {
-      contagemPorTipo[escolhido.nome] = { AIJ: 0, CONC: 0, OUTROS: 0 };
-    }
-    contagemPorTipo[escolhido.nome][tipoNormalizado]++;
-
-    if (!horarios[escolhido.nome][dia]) horarios[escolhido.nome][dia] = [];
-    horarios[escolhido.nome][dia].push(horaAtual);
-
+    const escolhido = poolFinal[0];
     return escolhido.nome;
   };
 
+  // 1. PRÉ-CALCULO: Contabilizar todos os advogados e prepostos JÁ definidos na planilha
+  pauta.forEach((row) => {
+    const dt = row.datetime instanceof Date ? row.datetime : new Date(row.datetime);
+    const dia = diaMap[dt.getDay()];
+    const horaAtual = dt.getHours() * 60 + dt.getMinutes();
+    const tipoAudiencia = row["AC / AIJ / ACIJ"] || row["TIPO"] || "";
+
+    if (row["ADVOGADO(A)"] && row["ADVOGADO(A)"].trim() !== "") {
+      contabilizarExistente(
+        row["ADVOGADO(A)"],
+        contagemAdv,
+        contagemAdvDia,
+        horariosAdv,
+        dia,
+        horaAtual,
+        contagemSemanalAdv,
+        contagemAdvPorTipo,
+        tipoAudiencia
+      );
+    }
+
+    if (row["PREPOSTO(A)"] && row["PREPOSTO(A)"].trim() !== "") {
+      contabilizarExistente(
+        row["PREPOSTO(A)"],
+        contagemPrep,
+        contagemPrepDia,
+        horariosPrep,
+        dia,
+        horaAtual,
+        contagemSemanalPrep,
+        contagemPrepPorTipo,
+        tipoAudiencia
+      );
+    }
+  });
+
   const novaPauta = pauta.map((row) => {
+    // CRIA UMA CÓPIA DA LINHA PARA NÃO MUTAR O ORIGINAL
+    const newRow = { ...row };
+
     const dt =
-      row.datetime instanceof Date ? row.datetime : new Date(row.datetime);
+      newRow.datetime instanceof Date ? newRow.datetime : new Date(newRow.datetime);
 
     const semana = obterSemana(dt);
 
@@ -281,18 +363,33 @@ export default function distribuirPauta(pauta, pessoas) {
 
     const dia = diaMap[dt.getDay()];
     const horaAtual = dt.getHours() * 60 + dt.getMinutes();
-    const tipoAudiencia = row["AC / AIJ / ACIJ"] || row["TIPO"] || "";
+    const tipoAudiencia = newRow["AC / AIJ / ACIJ"] || newRow["TIPO"] || "";
 
-    const correspondente = row["CORRESPONDENTE"] || null;
+    const correspondente = newRow["CORRESPONDENTE"] || null;
 
     const advExistente =
-      row["ADVOGADO(A)"] && row["ADVOGADO(A)"].trim() !== "";
+      newRow["ADVOGADO(A)"] && newRow["ADVOGADO(A)"].trim() !== "";
     const prepExistente =
-      row["PREPOSTO(A)"] && row["PREPOSTO(A)"].trim() !== "";
+      newRow["PREPOSTO(A)"] && newRow["PREPOSTO(A)"].trim() !== "";
 
-    let adv = advExistente
-      ? row["ADVOGADO(A)"]
-      : escolherPessoa(
+    // Verifica se é caso de correspondente
+    const isCorrespondente =
+      (correspondente && correspondente.toString().trim() !== "") ||
+      (advExistente && newRow["ADVOGADO(A)"].toUpperCase().includes("CORRESPONDENTE")) ||
+      (prepExistente && newRow["PREPOSTO(A)"].toUpperCase().includes("CORRESPONDENTE"));
+
+    let adv = null;
+    let prep = null;
+
+    if (isCorrespondente) {
+      adv = advExistente ? newRow["ADVOGADO(A)"] : "CORRESPONDENTE";
+      prep = prepExistente ? newRow["PREPOSTO(A)"] : "CORRESPONDENTE";
+    } else {
+      // Tenta selecionar Advogado
+      if (advExistente) {
+        adv = newRow["ADVOGADO(A)"];
+      } else {
+        adv = escolherPessoa(
           advogados,
           contagemAdv,
           contagemAdvDia,
@@ -303,10 +400,13 @@ export default function distribuirPauta(pauta, pessoas) {
           contagemSemanalAdv,
           contagemAdvPorTipo
         );
+      }
 
-    let prep = prepExistente
-      ? row["PREPOSTO(A)"]
-      : escolherPessoa(
+      // Tenta selecionar Preposto
+      if (prepExistente) {
+        prep = newRow["PREPOSTO(A)"];
+      } else {
+        prep = escolherPessoa(
           prepostos,
           contagemPrep,
           contagemPrepDia,
@@ -317,44 +417,54 @@ export default function distribuirPauta(pauta, pessoas) {
           contagemSemanalPrep,
           contagemPrepPorTipo
         );
-
-    if (!advExistente && !prepExistente && (!adv || !prep)) {
-      adv = null;
-      prep = null;
+      }
     }
 
-    if (advExistente)
-      contabilizarExistente(
-        adv,
-        contagemAdv,
-        contagemAdvDia,
-        horariosAdv,
-        dia,
-        horaAtual,
-        contagemSemanalAdv,
-        contagemAdvPorTipo,
-        tipoAudiencia
-      );
-    if (prepExistente)
-      contabilizarExistente(
-        prep,
-        contagemPrep,
-        contagemPrepDia,
-        horariosPrep,
-        dia,
-        horaAtual,
-        contagemSemanalPrep,
-        contagemPrepPorTipo,
-        tipoAudiencia
-      );
+    // Regra: Se não é correspondente, e não tem advogado OU não tem preposto (e não eram existentes),
+    // então descarta ambos (não atribui ninguém).
+    if (!isCorrespondente && !advExistente && !prepExistente && (!adv || !prep)) {
+      adv = null;
+      prep = null;
+    } else if (!isCorrespondente) {
+      // Se chegou aqui, é porque temos um par válido (ou um existente + um novo válido)
+      // AGORA sim confirmamos a atribuição e atualizamos os contadores
 
-    row["ADVOGADO(A)"] = adv;
-    row["PREPOSTO(A)"] = prep;
-    row["CORRESPONDENTE"] = correspondente || row["CORRESPONDENTE"];
-    row["dia"] = dia;
-    row["hora"] = dt.getHours();
+      if (!advExistente && adv) {
+        contabilizarExistente(
+          adv,
+          contagemAdv,
+          contagemAdvDia,
+          horariosAdv,
+          dia,
+          horaAtual,
+          contagemSemanalAdv,
+          contagemAdvPorTipo,
+          tipoAudiencia
+        );
+      }
 
-    return row;
+      if (!prepExistente && prep) {
+        contabilizarExistente(
+          prep,
+          contagemPrep,
+          contagemPrepDia,
+          horariosPrep,
+          dia,
+          horaAtual,
+          contagemSemanalPrep,
+          contagemPrepPorTipo,
+          tipoAudiencia
+        );
+      }
+    }
+
+    newRow["ADVOGADO(A)"] = adv;
+    newRow["PREPOSTO(A)"] = prep;
+    newRow["CORRESPONDENTE"] = correspondente || newRow["CORRESPONDENTE"];
+    newRow["dia"] = dia;
+    newRow["hora"] = dt.getHours();
+
+    return newRow;
   });
 
   // 📊 RELATÓRIO FINAL DE DISTRIBUIÇÃO
@@ -387,8 +497,6 @@ export default function distribuirPauta(pauta, pessoas) {
     console.log(`   Disponibilidade: ${diasDisp} dias, ${Math.round(minDisp / 60)}h`);
     console.log(`   Por dia:`, contagemPrepDia[prep.nome] || {});
   });
-
-  console.log("\n==============================================\n");
 
   return novaPauta;
 }
